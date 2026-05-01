@@ -1,0 +1,7 @@
+# Voiceover Engine — Python dependencies
+# Pin exact versions for reproducible GitHub Actions runs
+
+kokoro==0.9.4
+soundfile==0.12.1
+scipy==1.13.1
+numpy==1.26.4
