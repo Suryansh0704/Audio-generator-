@@ -1,0 +1,115 @@
+# .github/workflows/main.yml
+# ══════════════════════════════════════════════════════════════════
+#  Kokoro-82M Voiceover Engine — GitHub Actions CI
+#  Runs FREE on ubuntu-latest (CPU only, no GPU needed)
+#  Trigger: push to script.txt  OR  ActivePieces API call
+# ══════════════════════════════════════════════════════════════════
+
+name: 🎙️ Generate Voiceover
+
+on:
+  push:
+    paths:
+      - "script.txt"
+  workflow_dispatch:
+    inputs:
+      script_text:
+        description: 'Script content from ActivePieces'
+        required: true
+        type: string
+
+jobs:
+  generate-voice:
+    name: Run Kokoro TTS Engine
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # ── 1. Checkout repo ─────────────────────────────────────────
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Python setup ──────────────────────────────────────────
+      - name: 🐍 Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # ── 3. System deps ───────────────────────────────────────────
+      - name: 📦 Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            espeak-ng \
+            ffmpeg \
+            libsndfile1
+
+      # ── 4. Python deps ───────────────────────────────────────────
+      - name: 📦 Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install \
+            kokoro==0.9.4 \
+            soundfile==0.12.1 \
+            scipy==1.13.1 \
+            numpy==1.26.4 \
+            pydub==0.25.1
+
+      # ── 5. Write script.txt from ActivePieces input ──────────────
+      - name: 📝 Write script from ActivePieces
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          cat << 'SCRIPT_EOF' > script.txt
+          ${{ github.event.inputs.script_text }}
+          SCRIPT_EOF
+          echo "✅ script.txt written from ActivePieces input"
+          head -5 script.txt
+
+      # ── 6. Verify script.txt exists ──────────────────────────────
+      - name: 📄 Verify script.txt
+        run: |
+          if [ ! -f "script.txt" ]; then
+            echo "❌ ERROR: script.txt not found."
+            exit 1
+          fi
+          echo "✅ script.txt found ($(wc -c < script.txt) bytes)"
+          head -5 script.txt
+
+      # ── 7. Run the TTS engine ────────────────────────────────────
+      - name: 🎙️ Generate voiceover audio
+        run: python generate_voice.py
+
+      # ── 8. Verify output exists ──────────────────────────────────
+      - name: ✅ Verify output file
+        run: |
+          if [ ! -f "output_voice.wav" ]; then
+            echo "❌ ERROR: output_voice.wav was not created."
+            exit 1
+          fi
+          SIZE=$(wc -c < output_voice.wav)
+          echo "✅ output_voice.wav created (${SIZE} bytes)"
+          ffmpeg -i output_voice.wav 2>&1 | grep -E "Duration|Audio" || true
+
+      # ── 9. Upload artifact ───────────────────────────────────────
+      - name: 📤 Upload voiceover as GitHub Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: voiceover-${{ github.sha }}
+          path: output_voice.wav
+          retention-days: 30
+          if-no-files-found: error
+
+      # ── 10. Summary card ─────────────────────────────────────────
+      - name: 📊 Write job summary
+        if: success()
+        run: |
+          echo "## 🎙️ Voiceover Generated Successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Trigger | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Voice | am_adam (Kokoro-82M Male) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Output | output_voice.wav (24-bit / 24kHz) |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⬇️ Download from the **Artifacts** section above." >> $GITHUB_STEP_SUMMARY
