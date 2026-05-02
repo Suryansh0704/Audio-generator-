@@ -1,0 +1,104 @@
+# .github/workflows/main.yml
+# ══════════════════════════════════════════════════════════════════
+#  Kokoro-82M Voiceover Engine — GitHub Actions CI
+#  Runs FREE on ubuntu-latest (CPU only, no GPU needed)
+#  Trigger: any push that modifies script.txt
+# ══════════════════════════════════════════════════════════════════
+
+name: 🎙️ Generate Voiceover
+
+on:
+  push:
+    paths:
+      - "script.txt"       # Only fires when you push a new script
+  workflow_dispatch:       # Also lets you trigger manually from the Actions tab
+
+jobs:
+  generate-voice:
+    name: Run Kokoro TTS Engine
+    runs-on: ubuntu-latest
+    timeout-minutes: 15    # Safety cap — model gen usually takes 2-4 min
+
+    steps:
+      # ── 1. Checkout repo ─────────────────────────────────────────
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Python setup ──────────────────────────────────────────
+      - name: 🐍 Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"                 # Cache pip deps between runs
+
+      # ── 3. System deps (espeak-ng required by Kokoro's phonemiser) ──
+      - name: 📦 Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            espeak-ng \
+            ffmpeg \
+            libsndfile1
+
+      # ── 4. Python deps ───────────────────────────────────────────
+      - name: 📦 Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install \
+            kokoro==0.9.4 \
+            soundfile==0.12.1 \
+            scipy==1.13.1 \
+            numpy==1.26.4 \
+            pydub==0.25.1
+
+      # ── 5. Verify script.txt exists ──────────────────────────────
+      - name: 📄 Verify script.txt
+        run: |
+          if [ ! -f "script.txt" ]; then
+            echo "❌ ERROR: script.txt not found in repo root."
+            exit 1
+          fi
+          echo "✅ script.txt found ($(wc -c < script.txt) bytes)"
+          echo "--- Preview (first 5 lines) ---"
+          head -5 script.txt
+
+      # ── 6. Run the TTS engine ────────────────────────────────────
+      - name: 🎙️ Generate voiceover audio
+        run: python generate_voice.py
+
+      # ── 7. Verify output exists ──────────────────────────────────
+      - name: ✅ Verify output file
+        run: |
+          if [ ! -f "output_voice.wav" ]; then
+            echo "❌ ERROR: output_voice.wav was not created."
+            exit 1
+          fi
+          SIZE=$(wc -c < output_voice.wav)
+          echo "✅ output_voice.wav created (${SIZE} bytes)"
+          # Print audio info via ffmpeg
+          ffmpeg -i output_voice.wav 2>&1 | grep -E "Duration|Audio" || true
+
+      # ── 8. Upload artifact (free download from Actions tab) ──────
+      - name: 📤 Upload voiceover as GitHub Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: voiceover-${{ github.sha }}   # unique name per commit
+          path: output_voice.wav
+          retention-days: 30                  # keeps artifact for 30 days free
+          if-no-files-found: error
+
+      # ── 9. Summary card in the Actions UI ───────────────────────
+      - name: 📊 Write job summary
+        if: success()
+        run: |
+          echo "## 🎙️ Voiceover Generated Successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Voice | af_bella (Kokoro-82M) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Speed | 1.15x |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pitch | +2% |" >> $GITHUB_STEP_SUMMARY
+          echo "| Output | output_voice.wav (24-bit / 24kHz) |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⬇️ Download the audio from the **Artifacts** section above." >> $GITHUB_STEP_SUMMARY
