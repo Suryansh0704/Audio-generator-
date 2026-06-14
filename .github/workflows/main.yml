@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "script.txt"
+      - "optimization-config.json"
   workflow_dispatch:
 
 jobs:
@@ -49,7 +50,50 @@ jobs:
           echo "--- Preview ---"
           head -5 script.txt
 
+      - name: 🧬 Load optimization config
+        run: |
+          python - <<'PYEOF'
+          import json, os
+          
+          OPT = {
+            "version": "default",
+            "voice_settings": {
+              "style": "deep_dramatic",
+              "pace_wpm": 160,
+              "emphasis_words": ["secret", "truth", "never", "dark", "manipulation"],
+              "pause_after_hook": 0.5
+            },
+            "audio_effects": {
+              "background_music_volume": 0.15,
+              "whoosh_on_cut": True,
+              "heartbeat_on_reveal": True,
+              "heartbeat_volume": 0.3
+            }
+          }
+          
+          try:
+            with open('optimization-config.json', 'r') as f:
+              loaded = json.load(f)
+              OPT.update(loaded)
+              print(f"✅ Using Gen {OPT['version']}")
+          except Exception as e:
+            print(f"⚠️ Using defaults: {e}")
+          
+          with open(os.environ.get('GITHUB_ENV', '/dev/null'), 'a') as env:
+            env.write(f"OPT_VERSION={OPT['version']}\n")
+            env.write(f"OPT_PACE_WPM={OPT['voice_settings']['pace_wpm']}\n")
+            env.write(f"OPT_PAUSE_AFTER_HOOK={OPT['voice_settings']['pause_after_hook']}\n")
+            env.write(f"OPT_MUSIC_VOLUME={OPT['audio_effects']['background_music_volume']}\n")
+            env.write(f"OPT_HEARTBEAT_VOLUME={OPT['audio_effects']['heartbeat_volume']}\n")
+          PYEOF
+
       - name: 🎙️ Generate voiceover audio
+        env:
+          OPT_VERSION: ${{ env.OPT_VERSION }}
+          OPT_PACE_WPM: ${{ env.OPT_PACE_WPM }}
+          OPT_PAUSE_AFTER_HOOK: ${{ env.OPT_PAUSE_AFTER_HOOK }}
+          OPT_MUSIC_VOLUME: ${{ env.OPT_MUSIC_VOLUME }}
+          OPT_HEARTBEAT_VOLUME: ${{ env.OPT_HEARTBEAT_VOLUME }}
         run: python generate_voice.py
 
       - name: ✅ Verify output file
@@ -78,9 +122,12 @@ jobs:
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Config | ${{ env.OPT_VERSION }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Voice | en-GB-RyanNeural (Edge TTS) |" >> $GITHUB_STEP_SUMMARY
           echo "| Pitch | -2Hz (deep mature sound) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pace WPM | ${{ env.OPT_PACE_WPM }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Max Duration | 60 seconds (hard cap) |" >> $GITHUB_STEP_SUMMARY
           echo "| Output | output_voice.wav (24-bit / 24kHz) |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "⬇️ Download from **Artifacts** above." >> $GITHUB_STEP_SUMMARY
+
