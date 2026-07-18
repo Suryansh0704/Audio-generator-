@@ -2,7 +2,7 @@
   "version": "1.0.0",
   "voice_settings": {
     "style": "deep_dramatic",
-    "pace_wpm": 189,
+    "pace_wpm": 181,
     "emphasis_words": [
       "secret",
       "never",
@@ -13,7 +13,7 @@
     "pause_after_hook": 0.8
   },
   "audio_effects": {
-    "background_music_volume": 0.172,
+    "background_music_volume": 0.165,
     "whoosh_on_cut": true,
     "heartbeat_on_reveal": true,
     "heartbeat_volume": 0.3
